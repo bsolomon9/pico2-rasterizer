@@ -20,6 +20,8 @@ extern FloatVec3D shapeVerticies[];
 extern IntVec3D shapeTriangles[];
 extern FloatVec3D unitPyramid[];
 extern IntVec3D pyramidTriangles[];
+extern FloatVec3D unitCube[];
+extern IntVec3D cubeTriangles[];
 extern size_t shapeVertexCount;
 extern size_t shapeTriangleCount;
 
@@ -115,8 +117,12 @@ void drawLine(Screen *screen, IntVec2D p1, IntVec2D p2, uint16_t fill) {
     }
 }
 
-void drawFilledTriangle(Screen *screen, const IntVec2D *p0, const IntVec2D *p1, const IntVec2D *p2, uint16_t fill) {
+void drawFilledTriangle(Shape *shape, Screen *screen, int index, uint16_t fill) {
     const IntVec2D *temp;
+    const IntVec2D *p0 = shape->projectedPoints + shape->triangles[index].x;
+    const IntVec2D *p1 = shape->projectedPoints + shape->triangles[index].y;
+    const IntVec2D *p2 = shape->projectedPoints + shape->triangles[index].z;
+
     if (p1->y < p0->y) {
         temp = p1;
         p1 = p0;
@@ -132,34 +138,64 @@ void drawFilledTriangle(Screen *screen, const IntVec2D *p0, const IntVec2D *p1, 
         p2 = p1;
         p1 = temp;
     }
+
     if (p2->y == p0->y) { //the triangles points all lies on one line
         return;
     }
-    float LongSideSlope = (float)(p2->x - p0->x)/(p2->y - p0->y);
+
+    float longSideSlope = (float)(p2->x - p0->x)/(p2->y - p0->y);
     int currentY = p0->y;
+
+    float shortSideSlope = (float)(p1->x - p0->x)/(p1->y - p0->y); //can eval to float infinities, its fine
     float x0 = p0->x;
-    float x1 = (p0->y-p1->y) ? p0->x : p1->x;
-    float shortSideSlope = (float)(p1->x - p0->x)/(p1->y - p0->y);
+    float x1 = p0->x;  
+    if (p0->y == p1->y) { //if the first two points have the same y, make sure x1 has a bigger x than x0
+        if (p1->x > p0->x) {
+            x1 = p1->x;
+            x0 = p0->x;
+        } else {
+            x1 = p0->x;
+            x0 = p1->x;
+        }
+    }
+
+    float leftSlope, rightSlope;
+    bool shortSideisLeft = (shortSideSlope < longSideSlope);
+    if (shortSideisLeft) {
+        leftSlope = shortSideSlope;
+        rightSlope = longSideSlope;
+    } else {
+        rightSlope = shortSideSlope;
+        leftSlope = longSideSlope;
+    }
+
     for (; currentY < p1->y; currentY++) { // iterate from one point to another, draw one half
         drawHorizontalLine(screen, 
-            roundf(MIN(x0, x1)), 
+            roundf(x0), 
             currentY, 
-            abs(x0-x1)+1, 
+            (x1-x0)+1, 
             fill
         );
-        x0 += LongSideSlope;
-        x1 += shortSideSlope;
+        x1 += rightSlope;
+        x0 += leftSlope;
     } 
+
     shortSideSlope = (float)(p2->x - p1->x)/(p2->y - p1->y);
+    if (shortSideisLeft) {
+        leftSlope = shortSideSlope;
+    } else {
+        rightSlope = shortSideSlope;
+    }
+
     for (; currentY < p2->y; currentY++) { //iterate between the other half
         drawHorizontalLine(screen, 
-            roundf(MIN(x0, x1)), 
+            roundf(x0), 
             currentY, 
-            abs(x0-x1)+1, 
+            (x1-x0)+1, 
             fill
         );
-        x0 += LongSideSlope;
-        x1 += shortSideSlope;
+        x1 += rightSlope;
+        x0 += leftSlope;
     }
 
 }

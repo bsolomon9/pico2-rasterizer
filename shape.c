@@ -87,11 +87,7 @@ void Shape_draw(Shape *shape, Screen *screen, FloatVec3D cameraPoint, float xAng
             continue;
         }
 
-        drawFilledTriangle(screen, 
-            points + (triangleIndicies.x), 
-            points + (triangleIndicies.y),
-            points + (triangleIndicies.z),
-            (i % 32) << 5);
+        drawFilledTriangle(shape, screen, i, (i<<6 & (uint16_t)0b1111111111000000));
         
        /*
         drawLine(screen->imageBuffer,

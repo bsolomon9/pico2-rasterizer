@@ -72,7 +72,7 @@ typedef struct {
 } Shape;
 
 
-void drawFilledTriangle(Screen *screen, const IntVec2D *p0, const IntVec2D *p1, const IntVec2D *p2, uint16_t fill);
+void drawFilledTriangle(Shape *shape, Screen *screen, int index, uint16_t fill);
 void drawLine(Screen *screen, IntVec2D p1, IntVec2D p2, uint16_t fill);
 void drawHorizontalLine(Screen *screen, int x, int y, int length, uint16_t fill);
 void drawPoint(Screen *screen, IntVec2D p, uint16_t fill);
