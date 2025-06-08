@@ -2,6 +2,7 @@
 #include <string.h>
 #include "pico/stdlib.h"
 #include "shape.h"
+#include "vectors.h"
 
 
 Shape* Shape_init(size_t vertexCount, size_t triangleCount, const FloatVec3D *verticies, const IntVec3D *triangles) {
@@ -87,16 +88,6 @@ void Shape_draw(Shape *shape, Screen *screen, FloatVec3D cameraPoint, float xAng
             continue;
         }
 
-        drawFilledTriangle(shape, screen, i, (i<<6 & (uint16_t)0b1111111111000000));
-        
-       /*
-        drawLine(screen->imageBuffer,
-            shape->projectedPoints[triangleIndicies.x],
-            shape->projectedPoints[triangleIndicies.y],
-            BLUE);
-        drawLine(screen->imageBuffer,
-            shape->projectedPoints[triangleIndicies.y],
-            shape->projectedPoints[triangleIndicies.z],
-            BLUE);*/
-    }
+        drawFilledTriangle(shape, screen, i, (i%0b111100)+3);
+    }   
 }

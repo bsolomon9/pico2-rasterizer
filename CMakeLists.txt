@@ -50,7 +50,7 @@ include_directories(./lib/Infrared)
 
 # Add executable. Default name is the project name, version 0.1
 
-add_executable(rendering rendering.c resources.c shape.c)
+add_executable(rendering rendering.c resources.c shape.c vectors.c)
 
 pico_set_program_name(rendering "rendering")
 pico_set_program_version(rendering "0.1")

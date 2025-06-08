@@ -2,6 +2,22 @@
 #define SHAPE_H
 
 #include "pico/stdlib.h"
+#include "vectors.h"
+
+
+typedef struct {
+    size_t vertexCount;
+    size_t triangleCount;
+    FloatVec3D transformShift;
+    const FloatVec3D const *verticies;
+    const IntVec3D const *triangles;
+
+    FloatVec3D *transformedVerticies;
+    IntVec2D *projectedPoints;
+    FloatVec3D *triangleNormals;
+} Shape;
+
+
 #include "rendering.h"
 
 

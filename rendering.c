@@ -10,6 +10,7 @@
 
 #include "shape.h"
 #include "rendering.h"
+#include "vectors.h"
 
 
 const float Y_RATIO = LCD_1IN3_HEIGHT/VIEWPORT_DIM;
@@ -25,28 +26,6 @@ extern IntVec3D cubeTriangles[];
 extern size_t shapeVertexCount;
 extern size_t shapeTriangleCount;
 
-
-void FloatVec3D_crossProduct(FloatVec3D first, FloatVec3D second, FloatVec3D *output) {
-    output->x = first.y*second.z - first.z*second.y;
-    output->y = first.z*second.x - first.x*second.z;
-    output->z = first.x*second.y - first.y*second.x;  
-}
-
-float FloatVec3D_dotProduct(FloatVec3D first, FloatVec3D second) {
-    return first.x*second.x + first.y*second.y + first.z*second.z;
-}
-
-void FloatVec3D_subtract(FloatVec3D first, FloatVec3D second, FloatVec3D *output) {
-    output->x = first.x - second.x;
-    output->y = first.y - second.y;
-    output->z = first.z - second.z;
-}
-
-void FloatVec3D_add(FloatVec3D first, FloatVec3D second, FloatVec3D *output) {
-    output->x = first.x + second.x;
-    output->y = first.y + second.y;
-    output->z = first.z + second.z;
-}
 
 void memset16(uint16_t *ptr, uint16_t fill, size_t num) {
     for (; num; num--) {
@@ -86,21 +65,27 @@ void drawPoint(Screen *screen, IntVec2D p, uint16_t fill) {
     screen->imageBuffer[p.x + p.y*LCD_1IN3_WIDTH] = fill;
 }
 
+//this is called with the following assumptions: x1 > x0, z1 > z0
+void drawHorizontalLine(Screen *screen, int y, int x0, int x1, float z0, float z1, uint16_t fill) {
+    if (y >= LCD_1IN3_HEIGHT || y < 0) {return;}
+    int dx = x1-x0;
+    if (dx == 0) {return;} //if dx < 1 (shouldn't happen) it just wont draw anything anyway
+    float zSlope = (z1-z0)/dx;
+    
 
-
-//specifically for things like triangles, meant to be quicker than drawLine
-void drawHorizontalLine(Screen *screen, int x, int y, int length, uint16_t fill) {
-    if (x < 0) {
-        length += x;
-        x = 0;
+    x0 = MAX(x0, 0);
+    x1 = MIN(x1, LCD_1IN3_WIDTH);
+    int yOffset = y*LCD_1IN3_WIDTH;
+    for (; x0 < x1; x0++) {
+        int index = x0+yOffset;
+        if (z0 > screen->zBuffer[index]) {
+            screen->imageBuffer[index] = fill;
+            screen->zBuffer[index] = z0;
+        }
+        z0 += zSlope;
     }
-    length = MIN(length, LCD_1IN3_WIDTH-x);
-
-    if (y < 0 || y >= LCD_1IN3_HEIGHT || length <= 0) {
-        return;
-    }
-    memset16(screen->imageBuffer + x + y * LCD_1IN3_WIDTH, fill, length);
 }
+
 
 //https://gist.github.com/bert/1085538
 void drawLine(Screen *screen, IntVec2D p1, IntVec2D p2, uint16_t fill) {
@@ -117,11 +102,18 @@ void drawLine(Screen *screen, IntVec2D p1, IntVec2D p2, uint16_t fill) {
     }
 }
 
+
 void drawFilledTriangle(Shape *shape, Screen *screen, int index, uint16_t fill) {
+    IntVec3D triangleIndicies = shape->triangles[index];
     const IntVec2D *temp;
-    const IntVec2D *p0 = shape->projectedPoints + shape->triangles[index].x;
-    const IntVec2D *p1 = shape->projectedPoints + shape->triangles[index].y;
-    const IntVec2D *p2 = shape->projectedPoints + shape->triangles[index].z;
+    //the three points of the triangle to be drawn
+    const IntVec2D *p0 = shape->projectedPoints + triangleIndicies.x;
+    const IntVec2D *p1 = shape->projectedPoints + triangleIndicies.y;
+    const IntVec2D *p2 = shape->projectedPoints + triangleIndicies.z;
+    // the 1/z coordinates associated with the 3 points in world space
+    float p0z = 1.0f/(shape->transformedVerticies[triangleIndicies.x].z);
+    float p1z = 1.0f/(shape->transformedVerticies[triangleIndicies.y].z);
+    float p2z = 1.0f/(shape->transformedVerticies[triangleIndicies.z].z);
 
     if (p1->y < p0->y) {
         temp = p1;
@@ -143,59 +135,71 @@ void drawFilledTriangle(Shape *shape, Screen *screen, int index, uint16_t fill) 
         return;
     }
 
-    float longSideSlope = (float)(p2->x - p0->x)/(p2->y - p0->y);
-    int currentY = p0->y;
+    float dy = (p2->y - p0->y);
+    float longSideYSlope = (float)(p2->x - p0->x)/dy;
+    float longSideZSlope = (float)(p2z - p0z)/dy;
 
-    float shortSideSlope = (float)(p1->x - p0->x)/(p1->y - p0->y); //can eval to float infinities, its fine
+    dy = (p1->y - p0->y); //if the short side dy is 0 these slopes won't be involved anyway so they can be inf
+    float shortSideYSlope = (float)(p1->x - p0->x)/dy; 
+    float shortSideZSlope = (float)(p1z - p0z)/dy;
+
     float x0 = p0->x;
-    float x1 = p0->x;  
+    float x1 = p0->x;
+    float z0 = p0z;
+    float z1 = p0z;
+
     if (p0->y == p1->y) { //if the first two points have the same y, make sure x1 has a bigger x than x0
         if (p1->x > p0->x) {
             x1 = p1->x;
-            x0 = p0->x;
+            z1 = p1z;
         } else {
-            x1 = p0->x;
             x0 = p1->x;
+            z0 = p1z;
         }
     }
 
-    float leftSlope, rightSlope;
-    bool shortSideisLeft = (shortSideSlope < longSideSlope);
+    float leftYSlope, rightYSlope;
+    float leftZSlope, rightZSlope;
+    bool shortSideisLeft = (shortSideYSlope < longSideYSlope);
     if (shortSideisLeft) {
-        leftSlope = shortSideSlope;
-        rightSlope = longSideSlope;
+        leftYSlope = shortSideYSlope;
+        rightYSlope = longSideYSlope;
+        leftZSlope = shortSideZSlope;
+        rightZSlope = longSideZSlope;
     } else {
-        rightSlope = shortSideSlope;
-        leftSlope = longSideSlope;
+        rightYSlope = shortSideYSlope;
+        leftYSlope = longSideYSlope;
+        rightZSlope = shortSideZSlope;
+        leftZSlope = longSideZSlope;
     }
 
+    int currentY = p0->y;
     for (; currentY < p1->y; currentY++) { // iterate from one point to another, draw one half
-        drawHorizontalLine(screen, 
-            roundf(x0), 
-            currentY, 
-            (x1-x0)+1, 
-            fill
-        );
-        x1 += rightSlope;
-        x0 += leftSlope;
+        drawHorizontalLine(screen, currentY, x0, x1, z0, z1, fill);
+        x1 += rightYSlope;
+        z1 += rightZSlope;
+        x0 += leftYSlope;
+        z0 += leftZSlope;
     } 
 
-    shortSideSlope = (float)(p2->x - p1->x)/(p2->y - p1->y);
+    dy = (p2->y - p1->y);
+    shortSideYSlope = (float)(p2->x - p1->x)/dy;
+    shortSideZSlope = (float)(p2z - p1z)/dy;
     if (shortSideisLeft) {
-        leftSlope = shortSideSlope;
+        leftYSlope = shortSideYSlope;
+        leftZSlope = shortSideZSlope;
     } else {
-        rightSlope = shortSideSlope;
+        rightYSlope = shortSideYSlope;
+        rightZSlope = shortSideZSlope;
     }
+    
 
     for (; currentY < p2->y; currentY++) { //iterate between the other half
-        drawHorizontalLine(screen, 
-            roundf(x0), 
-            currentY, 
-            (x1-x0)+1, 
-            fill
-        );
-        x1 += rightSlope;
-        x0 += leftSlope;
+        drawHorizontalLine(screen, currentY, x0, x1, z0, z1, fill);
+        x1 += rightYSlope;
+        z1 += rightZSlope;
+        x0 += leftYSlope;
+        z0 += leftZSlope;
     }
 
 }
@@ -225,6 +229,7 @@ int main() {
     SET_Infrared_PIN(TURNRIGHT_PIN);
     SET_Infrared_PIN(EXIT_PIN);
 
+    
     Shape* customShape = Shape_init(
             shapeVertexCount, 
             shapeTriangleCount, 
@@ -232,6 +237,7 @@ int main() {
             shapeTriangles
         );
     Shape_transform(customShape, 0, 0, 5);
+    
 
     while(1) {
         absolute_time_t beginTime = get_absolute_time();
@@ -275,7 +281,11 @@ int main() {
             return 0;
         }
 
-        memset16(screen.imageBuffer, 0, PIXEL_COUNT);
+        for (int i = 0; i < PIXEL_COUNT; i++) {
+            screen.imageBuffer[i] = 0;
+            screen.zBuffer[i] = 0.0f;
+        }
+
         Shape_draw(customShape, &screen, cameraPoint, xAngle, RED);
         
         LCD_1IN3_Display(screen.imageBuffer);
